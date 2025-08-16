@@ -6,9 +6,9 @@ interface QuizCardProps {
   id: string;
   title: string;
   description: string;
-  difficulty: 'Easy' | 'Medium' | 'Hard';
-  duration: number;
-  players: number;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | 'easy' | 'medium' | 'hard';
+  duration?: number;
+  players?: number;
   category: string;
   isAI?: boolean;
   onJoin?: () => void;
@@ -19,18 +19,19 @@ const QuizCard = ({
   title,
   description,
   difficulty,
-  duration,
-  players,
+  duration = 15,
+  players = 0,
   category,
   isAI = false,
   onJoin
 }: QuizCardProps) => {
   const navigate = useNavigate();
   const getDifficultyColor = (level: string) => {
-    switch (level) {
-      case 'Easy': return 'text-green-400 bg-green-400/20';
-      case 'Medium': return 'text-yellow-400 bg-yellow-400/20';
-      case 'Hard': return 'text-red-400 bg-red-400/20';
+    const normalizedLevel = level.toLowerCase();
+    switch (normalizedLevel) {
+      case 'easy': return 'text-green-400 bg-green-400/20';
+      case 'medium': return 'text-yellow-400 bg-yellow-400/20';
+      case 'hard': return 'text-red-400 bg-red-400/20';
       default: return 'text-primary bg-primary/20';
     }
   };
@@ -52,7 +53,7 @@ const QuizCard = ({
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-primary">{category}</span>
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(difficulty)}`}>
-            {difficulty}
+            {difficulty.charAt(0).toUpperCase() + difficulty.slice(1).toLowerCase()}
           </span>
         </div>
         <h3 className="text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors duration-300">

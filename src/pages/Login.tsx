@@ -5,16 +5,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { APIError } from '@/services/apiService';
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login, isLoading, isAuthenticated } = useAuth();
+
+  // Redirect if already authenticated
+  if (isAuthenticated) {
+    navigate('/');
+    return null;
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -25,37 +33,30 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
     try {
-      // TODO: Replace with actual backend API call
-      console.log('Login attempt:', formData);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      await login(formData);
+
       toast({
         title: "Login Successful",
         description: "Welcome back to QUIZ.com!",
       });
-      
-      // TODO: Store auth token and user data
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('user', JSON.stringify({
-        id: '1',
-        name: 'John Doe',
-        email: formData.email
-      }));
-      
+
       navigate('/');
     } catch (error) {
+      console.error('Login error:', error);
+
+      let errorMessage = "An unexpected error occurred. Please try again.";
+
+      if (error instanceof APIError) {
+        errorMessage = error.message;
+      }
+
       toast({
         title: "Login Failed",
-        description: "Invalid email or password. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 

@@ -9,6 +9,29 @@ export interface QuizQuestion {
   explanation?: string;
 }
 
+export interface Quiz {
+  _id?: string;
+  title: string;
+  description: string;
+  category: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  questions: QuizQuestion[];
+  createdBy?: string;
+  createdAt?: Date;
+  isPublic?: boolean;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
 export interface QuizGenerationParams {
   topic: string;
   subject?: string;

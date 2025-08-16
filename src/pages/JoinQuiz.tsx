@@ -1,72 +1,75 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, Users, Clock, Trophy, Brain, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
+import { api, APIError } from '@/services/apiService';
+import { Quiz } from '@/services/aiQuizService';
 import QuizCard from '@/components/QuizCard';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const JoinQuiz = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const quizzes = [
-    {
-      id: '1',
-      title: 'AI vs Human Challenge',
-      description: 'Test your wits against our advanced AI in this epic battle of knowledge across multiple subjects.',
-      difficulty: 'Medium' as const,
-      duration: 15,
-      players: 1,
-      category: 'AI Battle',
-      isAI: true
-    },
-    {
-      id: '2',
-      title: 'Quick Science Facts',
-      description: 'Fast-paced quiz covering basic scientific principles, discoveries, and modern innovations.',
-      difficulty: 'Easy' as const,
-      duration: 10,
-      players: 247,
-      category: 'Science'
-    },
-    {
-      id: '3',
-      title: 'World Geography Expert',
-      description: 'Challenging questions about countries, capitals, landmarks, and geographical features worldwide.',
-      difficulty: 'Hard' as const,
-      duration: 25,
-      players: 89,
-      category: 'Geography'
-    },
-    {
-      id: '4',
-      title: 'Movie Trivia Night',
-      description: 'Test your knowledge of Hollywood classics, recent blockbusters, and cinema history.',
-      difficulty: 'Medium' as const,
-      duration: 20,
-      players: 156,
-      category: 'Entertainment'
-    },
-    {
-      id: '5',
-      title: 'Math Mastery',
-      description: 'Prove your mathematical skills with problems ranging from basic arithmetic to advanced calculus.',
-      difficulty: 'Hard' as const,
-      duration: 30,
-      players: 34,
-      category: 'Mathematics'
-    },
-    {
-      id: '6',
-      title: 'Sports Legends Quiz',
-      description: 'Everything about sports history, famous athletes, records, and memorable moments.',
-      difficulty: 'Medium' as const,
-      duration: 18,
-      players: 112,
-      category: 'Sports'
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  // Fetch quizzes from backend
+  useEffect(() => {
+    fetchQuizzes();
+  }, [selectedCategory, selectedDifficulty, currentPage]);
+
+  const fetchQuizzes = async () => {
+    setIsLoading(true);
+    try {
+      const params: any = {
+        page: currentPage,
+        limit: 12
+      };
+
+      if (selectedCategory !== 'all') {
+        params.category = selectedCategory;
+      }
+
+      if (selectedDifficulty !== 'all') {
+        params.difficulty = selectedDifficulty;
+      }
+
+      const response = await api.quiz.getQuizzes();
+      setQuizzes(response.quizzes || []);
+      setTotalPages(response.totalPages || 1);
+    } catch (error) {
+      console.error('Failed to fetch quizzes:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load quizzes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
+
+  const handleJoinQuiz = async (quizId: string) => {
+    try {
+      navigate(`/play/${quizId}`);
+    } catch (error) {
+      console.error('Failed to join quiz:', error);
+      toast({
+        title: "Error",
+        description: "Failed to join quiz. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const categories = [
     'All Categories', 'AI Battle', 'Science', 'History', 'Geography', 
@@ -174,39 +177,52 @@ const JoinQuiz = () => {
           </div>
         </div>
 
-        {/* Quiz Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {filteredQuizzes.map((quiz, index) => (
-            <div 
-              key={quiz.id}
-              className="animate-scale-in"
-              style={{ animationDelay: `${index * 0.1 + 0.3}s` }}
-            >
-              <QuizCard {...quiz} />
-            </div>
-          ))}
-        </div>
-
-        {/* No Results */}
-        {filteredQuizzes.length === 0 && (
-          <div className="text-center py-16 animate-fade-in">
-            <Search className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-2xl font-semibold mb-2 text-foreground">No quizzes found</h3>
-            <p className="text-muted-foreground mb-6">
-              Try adjusting your search terms or filters to find more quizzes.
-            </p>
-            <Button 
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedCategory('all');
-                setSelectedDifficulty('all');
-              }}
-              variant="outline"
-              className="btn-glass"
-            >
-              Clear Filters
-            </Button>
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="py-16">
+            <LoadingSpinner size="lg" text="Loading quizzes..." />
           </div>
+        ) : (
+          <>
+            {/* Quiz Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+              {filteredQuizzes.map((quiz, index) => (
+                <div
+                  key={quiz._id || quiz.id}
+                  className="animate-scale-in"
+                  style={{ animationDelay: `${index * 0.1 + 0.3}s` }}
+                >
+                  <QuizCard
+                    {...quiz}
+                    id={quiz._id || quiz.id}
+                    onJoin={() => handleJoinQuiz(quiz._id || quiz.id)}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* No Results */}
+            {filteredQuizzes.length === 0 && (
+              <div className="text-center py-16 animate-fade-in">
+                <Search className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-2xl font-semibold mb-2 text-foreground">No quizzes found</h3>
+                <p className="text-muted-foreground mb-6">
+                  Try adjusting your search terms or filters to find more quizzes.
+                </p>
+                <Button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedCategory('all');
+                    setSelectedDifficulty('all');
+                  }}
+                  variant="outline"
+                  className="btn-glass"
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </>
         )}
 
         {/* Load More */}

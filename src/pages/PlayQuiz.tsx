@@ -1,34 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, XCircle, Brain, Trophy, ArrowRight, Home } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Brain, Trophy, ArrowRight, Home, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-
-interface Question {
-  id: number;
-  question: string;
-  options: string[];
-  correct: number;
-  explanation?: string;
-}
-
-interface Quiz {
-  id: string;
-  title: string;
-  description: string;
-  difficulty: string;
-  questions: Question[];
-  timeLimit?: number;
-}
+import { useAuth } from '@/contexts/AuthContext';
+import { api, APIError } from '@/services/apiService';
+import { Quiz, QuizQuestion } from '@/services/aiQuizService';
+import { useSocket, useSocketEvents } from '@/hooks/useSocket';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const PlayQuiz = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+  const { isAuthenticated } = useAuth();
+
+  // Socket hooks
+  const { isConnected, connect, joinRoom, leaveRoom, sendAnswer } = useSocket();
+  const { participants, roomStatus, currentQuestion: socketCurrentQuestion, answers: socketAnswers } = useSocketEvents();
+
   const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -36,87 +30,61 @@ const PlayQuiz = () => {
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [score, setScore] = useState(0);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [isMultiplayer, setIsMultiplayer] = useState(false);
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    navigate('/login');
+    return null;
+  }
 
   // Load quiz data
   useEffect(() => {
-    // Check if it's a saved quiz first
-    const savedQuizzes = JSON.parse(localStorage.getItem('saved_quizzes') || '[]');
-    const savedQuiz = savedQuizzes.find((q: Quiz) => q.id === quizId);
-    
-    if (savedQuiz) {
-      setQuiz(savedQuiz);
-      return;
-    }
+    const loadQuiz = async () => {
+      if (!quizId) {
+        navigate('/join');
+        return;
+      }
 
-    // Mock quiz data for demo quizzes
-    const mockQuizzes: Record<string, Quiz> = {
-      '1': {
-        id: '1',
-        title: 'AI vs Human Challenge',
-        description: 'Test your wits against our advanced AI',
-        difficulty: 'Medium',
-        questions: [
-          {
-            id: 1,
-            question: 'Which technology is primarily used for natural language processing?',
-            options: ['Neural Networks', 'Decision Trees', 'Linear Regression', 'K-Means Clustering'],
-            correct: 0,
-            explanation: 'Neural networks, especially transformers, are the foundation of modern NLP.'
-          },
-          {
-            id: 2,
-            question: 'What does "AI" stand for?',
-            options: ['Automated Intelligence', 'Artificial Intelligence', 'Advanced Integration', 'Algorithmic Interface'],
-            correct: 1,
-            explanation: 'AI stands for Artificial Intelligence, the simulation of human intelligence in machines.'
-          },
-          {
-            id: 3,
-            question: 'Which company created the GPT language model?',
-            options: ['Google', 'Meta', 'OpenAI', 'Microsoft'],
-            correct: 2,
-            explanation: 'OpenAI developed the GPT (Generative Pre-trained Transformer) series of language models.'
-          }
-        ],
-        timeLimit: 30
-      },
-      '2': {
-        id: '2',
-        title: 'Quick Science Facts',
-        description: 'Fast-paced quiz covering basic scientific principles',
-        difficulty: 'Easy',
-        questions: [
-          {
-            id: 1,
-            question: 'What is the chemical symbol for water?',
-            options: ['H2O', 'CO2', 'NaCl', 'O2'],
-            correct: 0,
-            explanation: 'Water consists of two hydrogen atoms and one oxygen atom.'
-          },
-          {
-            id: 2,
-            question: 'How many planets are in our solar system?',
-            options: ['7', '8', '9', '10'],
-            correct: 1,
-            explanation: 'Since Pluto was reclassified as a dwarf planet in 2006, there are 8 planets.'
-          }
-        ],
-        timeLimit: 30
+      setIsLoading(true);
+      try {
+        const quizData = await api.quiz.getQuizById(quizId);
+        setQuiz(quizData);
+
+        // Check if this should be a multiplayer session
+        const urlParams = new URLSearchParams(window.location.search);
+        const multiplayer = urlParams.get('multiplayer') === 'true';
+        setIsMultiplayer(multiplayer);
+
+        if (multiplayer) {
+          // Connect to socket and join room
+          await connect();
+          joinRoom(quizId);
+        }
+      } catch (error) {
+        console.error('Failed to load quiz:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load quiz. Please try again.",
+          variant: "destructive",
+        });
+        navigate('/join');
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    const foundQuiz = mockQuizzes[quizId || ''];
-    if (foundQuiz) {
-      setQuiz(foundQuiz);
-    } else {
-      toast({
-        title: "Quiz not found",
-        description: "The quiz you're looking for doesn't exist.",
-        variant: "destructive",
-      });
-      navigate('/join');
-    }
-  }, [quizId, navigate, toast]);
+    loadQuiz();
+  }, [quizId]);
+
+  // Cleanup socket connection on unmount
+  useEffect(() => {
+    return () => {
+      if (isMultiplayer && quizId) {
+        leaveRoom(quizId);
+      }
+    };
+  }, [isMultiplayer, quizId]);
 
   // Timer effect
   useEffect(() => {
@@ -126,7 +94,7 @@ const PlayQuiz = () => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           handleNextQuestion();
-          return quiz.timeLimit || 30;
+          return 30;
         }
         return prev - 1;
       });
@@ -152,7 +120,7 @@ const PlayQuiz = () => {
       
       if (currentQuestionIndex < quiz!.questions.length - 1) {
         setCurrentQuestionIndex(prev => prev + 1);
-        setTimeLeft(quiz!.timeLimit || 30);
+        setTimeLeft(30);
       } else {
         // Quiz completed
         const finalScore = newAnswers.reduce((score, answer, index) => {
@@ -170,19 +138,16 @@ const PlayQuiz = () => {
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
     setAnswers([]);
-    setTimeLeft(quiz!.timeLimit || 30);
+    setTimeLeft(30);
     setQuizCompleted(false);
     setScore(0);
     setShowExplanation(false);
   };
 
-  if (!quiz) {
+  if (isLoading || !quiz) {
     return (
       <div className="min-h-screen pt-20 bg-gradient-hero flex items-center justify-center">
-        <div className="text-center">
-          <Brain className="h-16 w-16 mx-auto text-primary animate-glow mb-4" />
-          <p className="text-xl text-muted-foreground">Loading quiz...</p>
-        </div>
+        <LoadingSpinner size="lg" text="Loading quiz..." />
       </div>
     );
   }

@@ -1,29 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Menu, X, Brain, Trophy, Users, PlusCircle, Home, User, LogOut } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Navbar = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
-    const userData = localStorage.getItem('user');
-    setIsLoggedIn(loggedIn);
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
-  }, []);
+  const { user, isAuthenticated, logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('user');
-    setIsLoggedIn(false);
-    setUser(null);
+    logout();
     navigate('/');
   };
 
@@ -62,10 +50,10 @@ const Navbar = () => {
                 </Link>
               ))}
               <div className="flex items-center space-x-4 ml-4">
-                {isLoggedIn ? (
+                {isAuthenticated ? (
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-muted-foreground">
-                      Welcome, {user?.name || 'User'}
+                      Welcome, {user?.username || 'User'}
                     </span>
                     <Button
                       variant="outline"
@@ -186,10 +174,10 @@ const Navbar = () => {
 
           {/* Sidebar Auth Buttons */}
           <div className="space-y-3">
-            {isLoggedIn ? (
+            {isAuthenticated ? (
               <>
                 <div className="text-center text-sm text-muted-foreground mb-4">
-                  Welcome, {user?.name || 'User'}
+                  Welcome, {user?.username || 'User'}
                 </div>
                 <Button
                   variant="outline"

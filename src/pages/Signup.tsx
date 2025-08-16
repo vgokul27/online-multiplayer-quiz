@@ -1,25 +1,31 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Brain, Mail, Lock, User, Calendar, Phone } from 'lucide-react';
+import { Eye, EyeOff, Brain, Mail, Lock, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { APIError } from '@/services/apiService';
 
 const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    fullName: '',
+    username: '',
     email: '',
-    phone: '',
-    dateOfBirth: '',
     password: '',
     confirmPassword: ''
   });
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signup, isLoading, isAuthenticated } = useAuth();
+
+  // Redirect if already authenticated
+  if (isAuthenticated) {
+    navigate('/');
+    return null;
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -52,39 +58,33 @@ const Signup = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
-    
-    setIsLoading(true);
 
     try {
-      // TODO: Replace with actual backend API call
-      console.log('Signup attempt:', formData);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
+      const { confirmPassword, ...signupData } = formData;
+      await signup(signupData);
+
       toast({
         title: "Account Created Successfully",
-        description: "Welcome to QUIZ.com! You can now sign in.",
+        description: "Welcome to QUIZ.com!",
       });
-      
-      // TODO: Store user data in backend
-      localStorage.setItem('signupData', JSON.stringify({
-        ...formData,
-        id: Date.now().toString(),
-        joinDate: new Date().toISOString()
-      }));
-      
-      navigate('/login');
+
+      navigate('/');
     } catch (error) {
+      console.error('Signup error:', error);
+
+      let errorMessage = "An unexpected error occurred. Please try again.";
+
+      if (error instanceof APIError) {
+        errorMessage = error.message;
+      }
+
       toast({
         title: "Signup Failed",
-        description: "Something went wrong. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -104,19 +104,19 @@ const Signup = () => {
           
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Full Name Field */}
+              {/* Username Field */}
               <div className="space-y-2">
-                <label htmlFor="fullName" className="text-sm font-medium">
-                  Full Name
+                <label htmlFor="username" className="text-sm font-medium">
+                  Username
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="fullName"
-                    name="fullName"
+                    id="username"
+                    name="username"
                     type="text"
-                    placeholder="Enter your full name"
-                    value={formData.fullName}
+                    placeholder="Enter your username"
+                    value={formData.username}
                     onChange={handleInputChange}
                     className="pl-10 bg-background/50"
                     required
@@ -137,45 +137,6 @@ const Signup = () => {
                     type="email"
                     placeholder="Enter your email"
                     value={formData.email}
-                    onChange={handleInputChange}
-                    className="pl-10 bg-background/50"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Phone Field */}
-              <div className="space-y-2">
-                <label htmlFor="phone" className="text-sm font-medium">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    placeholder="Enter your phone number"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="pl-10 bg-background/50"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Date of Birth Field */}
-              <div className="space-y-2">
-                <label htmlFor="dateOfBirth" className="text-sm font-medium">
-                  Date of Birth
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="dateOfBirth"
-                    name="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
                     onChange={handleInputChange}
                     className="pl-10 bg-background/50"
                     required

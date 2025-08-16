@@ -7,31 +7,147 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { api, APIError } from '@/services/apiService';
+import { QuizQuestion } from '@/services/aiQuizService';
 import AIGenerateModal from '@/components/AIGenerateModal';
 
 const CreateQuiz = () => {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [quizTitle, setQuizTitle] = useState('');
   const [quizDescription, setQuizDescription] = useState('');
-  const [questions, setQuestions] = useState([
+  const [quizCategory, setQuizCategory] = useState('');
+  const [quizDifficulty, setQuizDifficulty] = useState('');
+  const [questions, setQuestions] = useState<QuizQuestion[]>([
     {
       id: 1,
       question: '',
       options: ['', '', '', ''],
       correct: 0,
-      timeLimit: 30
+      difficulty: 'medium'
     }
   ]);
 
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    navigate('/login');
+    return null;
+  }
+
   const addQuestion = () => {
-    const newQuestion = {
+    const newQuestion: QuizQuestion = {
       id: questions.length + 1,
       question: '',
       options: ['', '', '', ''],
       correct: 0,
-      timeLimit: 30
+      difficulty: 'medium'
     };
     setQuestions([...questions, newQuestion]);
+  };
+
+  const saveQuiz = async () => {
+    // Validate form
+    if (!quizTitle.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Quiz title is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!quizCategory) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a category.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!quizDifficulty) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a difficulty level.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (questions.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "At least one question is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate questions
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.question.trim()) {
+        toast({
+          title: "Validation Error",
+          description: `Question ${i + 1} is empty.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (q.options.some(opt => !opt.trim())) {
+        toast({
+          title: "Validation Error",
+          description: `Question ${i + 1} has empty options.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setIsLoading(true);
+
+    try {
+      const quizData = {
+        title: quizTitle,
+        description: quizDescription,
+        category: quizCategory,
+        difficulty: quizDifficulty as 'easy' | 'medium' | 'hard',
+        questions: questions,
+        isPublic: true
+      };
+
+      const createdQuiz = await api.quiz.createQuiz(quizData);
+
+      toast({
+        title: "Quiz Created Successfully",
+        description: "Your quiz has been saved and is ready to play!",
+      });
+
+      navigate(`/play/${createdQuiz._id}`);
+    } catch (error) {
+      console.error('Save quiz error:', error);
+
+      let errorMessage = "Failed to save quiz. Please try again.";
+      if (error instanceof APIError) {
+        errorMessage = error.message;
+      }
+
+      toast({
+        title: "Save Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const updateQuestion = (id: number, field: string, value: any) => {
@@ -111,7 +227,7 @@ const CreateQuiz = () => {
 
                     <div>
                       <Label htmlFor="category">Category</Label>
-                      <Select>
+                      <Select value={quizCategory} onValueChange={setQuizCategory}>
                         <SelectTrigger className="mt-1">
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
@@ -122,13 +238,14 @@ const CreateQuiz = () => {
                           <SelectItem value="literature">Literature</SelectItem>
                           <SelectItem value="sports">Sports</SelectItem>
                           <SelectItem value="entertainment">Entertainment</SelectItem>
+                          <SelectItem value="general">General</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div>
                       <Label htmlFor="difficulty">Difficulty</Label>
-                      <Select>
+                      <Select value={quizDifficulty} onValueChange={setQuizDifficulty}>
                         <SelectTrigger className="mt-1">
                           <SelectValue placeholder="Select difficulty" />
                         </SelectTrigger>
@@ -145,9 +262,22 @@ const CreateQuiz = () => {
                         <Eye className="h-4 w-4 mr-2" />
                         Preview
                       </Button>
-                      <Button className="flex-1 btn-gradient">
-                        <Save className="h-4 w-4 mr-2" />
-                        Save
+                      <Button
+                        onClick={saveQuiz}
+                        disabled={isLoading}
+                        className="flex-1 btn-gradient"
+                      >
+                        {isLoading ? (
+                          <div className="flex items-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Saving...
+                          </div>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save
+                          </>
+                        )}
                       </Button>
                     </div>
                   </CardContent>
@@ -213,23 +343,7 @@ const CreateQuiz = () => {
                           </Select>
                         </div>
 
-                        <div>
-                          <Label htmlFor={`time-${question.id}`}>Time Limit (seconds)</Label>
-                          <Select
-                            value={question.timeLimit.toString()}
-                            onValueChange={(value) => updateQuestion(question.id, 'timeLimit', parseInt(value))}
-                          >
-                            <SelectTrigger className="w-32 mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="15">15s</SelectItem>
-                              <SelectItem value="30">30s</SelectItem>
-                              <SelectItem value="45">45s</SelectItem>
-                              <SelectItem value="60">60s</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+
                       </div>
                     </CardContent>
                   </Card>
